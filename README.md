@@ -21,102 +21,14 @@ Enterprise procurement and legal teams lose significant capital to subtle contra
 
 ## 2. High-Level System Architecture
 
-```text
-[ Enterprise User / Client Application ]
-                │
-                ▼ (OAuth 2.0 / Entra ID / Okta JWT)
-┌──────────────────────────────────────────────────────────┐
-│      ENTERPRISE API GATEWAY (Kong / Azure APIM)          │
-│   Client Ingress · User Authentication · Rate Limiting   │
-└───────────────────────┬──────────────────────────────────┘
-                        │
-                        ▼
-┌──────────────────────────────────────────────────────────┐
-│         AGENTIC ORCHESTRATION & RUNTIME (Python)         │
-│  LangGraph · Durable Checkpointing · HITL Approvals      │
-│  ┌───────────────────────┬────────────────────────────┐  │
-│  │ State Machine Logic   │ Idempotency Key Manager    │  │
-│  └───────────┬───────────┴─────────────┬──────────────┘  │
-└──────────────┼─────────────────────────┼─────────────────┘
-               │                         │
-     (Model Egress Calls)         (Tool Calls via MCP)
-               │                         │
-               ▼                         ▼
-┌──────────────────────────────┐ ┌─────────────────────────┐
-│     ENTERPRISE AI GATEWAY    │ │   ENTERPRISE TOOL &     │
-│   (LiteLLM / Portkey / Kong) │ │      DATA PLANE         │
-│ ──────────────────────────── │ │ ─────────────────────── │
-│ • Cost & Token Tracking      │ │ • FastMCP Server        │
-│ • Dynamic Model Routing      │ │ • Mock ERP (SAP/NetSuite│
-│ • Guardrails & PII Filter    │ │ • ACL-Aware RAG Engine  │
-│ • Provider Fallback Engine   │ │   (pgvector + BM25)     │
-└──────────────┬───────────────┘ └─────────────────────────┘
-               │
-               ▼
-[ External Model Providers: OpenAI / Anthropic / Bedrock ]
-```
+[Enterprise Architecture](docs/images/Enterprise-AI-Architecture-Overview.png)
 
 ---
 
 ## 3. End-State Runtime Sequence Diagram
 
 The end-to-end execution flow from invoice submission and JWT claim extraction through ACL-filtered retrieval, ERP reconciliation, asynchronous HITL suspension, and idempotent payment commit:
-
-```text
-User / Client       API Gateway       LangGraph         LiteLLM Proxy       ACL-Aware RAG       FastMCP / ERP        Postgres DB
- (Okta JWT)         (Ingress)       (Orchestrator)       (AI Egress)       (pgvector+BM25)       (Tool Plane)       (Checkpoints)
-     │                  │                 │                   │                   │                   │                   │
-     │──1. Submit Inv──▶│                 │                   │                   │                   │                   │
-     │   (PDF + JWT)    │                 │                   │                   │                   │                   │
-     │                  │──2. Auth & ────▶│                   │                   │                   │                   │
-     │                  │  Extract Claims │                   │                   │                   │                   │
-     │                  │                 │──3. Save Initial─▶│───────────────────│───────────────────│──────────────────▶│
-     │                  │                 │  State Checkpoint │                   │                   │                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──4. Parse Invoice─▶│                  │                   │                   │
-     │                  │                 │  (Pydantic Schema)│                   │                   │                   │
-     │                  │                 │                   │──5. Check Redis ──│                   │                   │
-     │                  │                 │                   │  Semantic Cache / │                   │                   │
-     │                  │                 │                   │  Route to LLM     │                   │                   │
-     │                  │                 │◀──Structured JSON─│                   │                   │                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──6. Retrieve MSA/SOW Clauses─────────▶│                   │                   │
-     │                  │                 │  (Early-Binding ACL: WHERE dept=JWT)  │                   │                   │
-     │                  │                 │                   │                   │──Hybrid Search +  │                   │
-     │                  │                 │                   │                   │  Cross-Encoder    │                   │
-     │                  │                 │◀──Approved Rate Card & Terms──────────│                   │                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──7. Query PO & Vendor Status─────────────────────────────▶│                   │
-     │                  │                 │  (Validated FastMCP Tool Call)        │                   │                   │
-     │                  │                 │◀──PO Balance & Ledger Status──────────────────────────────│                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──8. Reconcile ───▶│                   │                   │                   │
-     │                  │                 │  (Compare Inv vs. │                   │                   │                   │
-     │                  │                 │   MSA & PO)       │                   │                   │                   │
-     │                  │                 │◀──Audit Verdict───│                   │                   │                   │
-     │                  │                 │  (Match / Flag)   │                   │                   │                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──9. Persist State & Check HITL Policy─│───────────────────│──────────────────▶│
-     │                  │                 │                   │                   │                   │                   │
-     │      ╔═══════════╧═════════════════╧═══════════════════╧═══════════════════╧═══════════════════╧═══════════╗       │
-     │      ║  BRANCH: Discrepancy Found OR Invoice Amount > $500 (Asynchronous HITL Interrupt Gate)             ║       │
-     │      ╚═══════════╤═════════════════╤═══════════════════╤═══════════════════╤═══════════════════╤═══════════╝       │
-     │                  │                 │                   │                   │                   │                   │
-     │◀─10. PAUSE: Awaiting Human Review──│ (Thread suspended in PostgresSaver; zero compute held)    │                   │
-     │                  │                 │                   │                   │                   │                   │
-     │──11. Approve / ──▶│──Resume────────▶│                   │                   │                   │                   │
-     │   Reject Verdict │  Thread ID      │──12. Hydrate State from Checkpoint────│───────────────────│──────────────────▶│
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──13. Update ERP Payment Status───────────────────────────▶│                   │
-     │                  │                 │  (With Idempotency Key: inv_10928_v1) │                   │──Check/Write      │
-     │                  │                 │                   │                   │                   │  Idempotency Reg  │
-     │                  │                 │◀──200 OK (Committed)──────────────────────────────────────│                   │
-     │                  │                 │                   │                   │                   │                   │
-     │                  │                 │──14. Commit Final Checkpoint──────────│───────────────────│──────────────────▶│
-     │◀─15. Final Compliance Audit Report─│                   │                   │                   │                   │
-     │                  │                 │                   │                   │                   │                   │
-```
-
+[End-to-End Sequence Flow](docs/images/Invoice-Compliance-Agent-Sequence-Flow.png)
 ---
 
 ## 4. Repository Structure
