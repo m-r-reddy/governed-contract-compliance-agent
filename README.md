@@ -27,8 +27,10 @@ Enterprise procurement and legal teams lose significant capital to subtle contra
 
 ## 3. End-State Runtime Sequence Diagram
 
-The end-to-end execution flow from invoice submission and JWT claim extraction through ACL-filtered retrieval, ERP reconciliation, asynchronous HITL suspension, and idempotent payment commit:
+The end-to-end execution flow from invoice submission and JWT claim extraction through ACL-filtered retrieval, ERP reconciliation, asynchronous HITL suspension, and idempotent payment commit.
+
 ![End-to-End Sequence Flow](docs/images/Invoice-Compliance-Agent-Sequence-Flow.png)
+
 ---
 
 ## 4. Repository Structure
