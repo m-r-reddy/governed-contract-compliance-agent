@@ -47,7 +47,7 @@ Starting with clean plane separation allows the platform to scale from a single 
 
 ## 4. Application Architecture
 
-Application Code Architecture (Hexagonal / Ports & Adapters View)
+Application Code Architecture (Layered Stack of Ports & Adapters View)
 
 ![Application Code Architecture](images/application-architecture.png)
   
