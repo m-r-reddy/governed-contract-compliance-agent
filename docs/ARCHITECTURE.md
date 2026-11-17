@@ -45,24 +45,18 @@ Starting with clean plane separation allows the platform to scale from a single 
 * **Adapter Pattern on FastMCP:** Swap the initial Mock ERP backend for client-specific SAP S/4HANA, NetSuite, or Coupa adapters behind identical FastMCP tool schemas.
 * **Declarative Approval Thresholds:** Externalize the `$500` HITL interrupt threshold and variance tolerances into per-client policy configurations evaluated dynamically by the `LangGraph` state machine.
 
-## 4. Application Architecture
-
-Application Code Architecture (Layered Stack of Ports & Adapters View)
-
-![Application Code Architecture](images/application-architecture.png)
-  
 ## 5. Application Code Architecture (Hexagonal / Ports & Adapters)
 
 ![Application Code Architecture](images/application-hex-architecture.png)
 
-### 5.1. Architectural Style & Dependency Inversion
+### 4.1. Architectural Style & Dependency Inversion
 To support concurrent multi-developer feature delivery and multi-tenant B2B SaaS scaling without structural refactoring, the Python runtime (`src/`) enforces **Clean / Hexagonal (Ports & Adapters) Architecture**:
 
 - **Strict Inward Dependency Rule:** `src/domain/` is a pure business kernel with **zero** dependencies on frameworks, databases, or LLM SDKs (`openai`, `sqlalchemy`, `langgraph`).
 - **Interface Seams (`typing.Protocol`):** `src/ports/` defines structural contracts (`InvoiceExtractorProtocol`, `ContractRetrieverProtocol`, `ERPAdapterProtocol`, `TenantPolicyProtocol`). Both `src/orchestration/` (LangGraph workflows) and infrastructure adapters (`src/ingestion/`, `src/rag/`, `src/tools/`) depend inward on `src/ports/` and `src/domain/`, never on each other.
 - **Composition Root (`src/core/`):** Centralizes typed configuration (`GatewaySettings`), domain exception hierarchies, correlation logging, and dependency injection wiring.
 
-### 5.2. Enterprise Invariants Enforced Across Layers
+### 4.2. Enterprise Invariants Enforced Across Layers
 
 | Architectural Invariant | Enforcement Mechanism | Business & Governance Rationale |
 | :--- | :--- | :--- |
@@ -71,7 +65,7 @@ To support concurrent multi-developer feature delivery and multi-tenant B2B SaaS
 | **Untrusted Input Isolation** | Authenticated `tenant_id` is injected from verified JWT claims (`TenantContext`), overriding any LLM-extracted tenant identifiers. | Neutralizes indirect prompt injection payloads embedded inside vendor invoice memos or line-item descriptions. |
 | **Idempotent Side Effects** | Deterministic idempotency keys wrapping `ERPAdapterProtocol` write operations (`src/tools/`). | Guarantees exactly-once ERP mutations across LangGraph checkpoint retries or transient network failures. |
 
-### 5.3. Parallel Feature Team Boundaries (`src/`)
+### 4.3. Parallel Feature Team Boundaries (`src/`)
 - **Team A (`src/ingestion/`):** Document parsing and structured extraction adapters targeting the LiteLLM Egress Gateway.
 - **Team B (`src/rag/`):** Markdown-aware contract chunking, `pgvector` + `BM25` hybrid search, early-binding ACL filtering, and Cross-Encoder reranking.
 - **Team C (`src/tools/`):** FastMCP tool server, argument sanitization, idempotency decorators, and pluggable ERP adapters (Mock ERP / SAP / NetSuite).
