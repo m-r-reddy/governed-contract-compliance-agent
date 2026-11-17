@@ -44,3 +44,35 @@ Starting with clean plane separation allows the platform to scale from a single 
 ### Iteration 4: Pluggable ERP Connectors & Custom Policy Engines
 * **Adapter Pattern on FastMCP:** Swap the initial Mock ERP backend for client-specific SAP S/4HANA, NetSuite, or Coupa adapters behind identical FastMCP tool schemas.
 * **Declarative Approval Thresholds:** Externalize the `$500` HITL interrupt threshold and variance tolerances into per-client policy configurations evaluated dynamically by the `LangGraph` state machine.
+
+## 4. Application Architecture
+
+Application Code Architecture (Hexagonal / Ports & Adapters View)
+
+![Application Code Architecture](images/application-architecture.png)
+  
+## 5. Application Code Architecture (Hexagonal / Ports & Adapters)
+
+![Application Code Architecture](images/application-hex-architecture.png)
+
+### 5.1. Architectural Style & Dependency Inversion
+To support concurrent multi-developer feature delivery and multi-tenant B2B SaaS scaling without structural refactoring, the Python runtime (`src/`) enforces **Clean / Hexagonal (Ports & Adapters) Architecture**:
+
+- **Strict Inward Dependency Rule:** `src/domain/` is a pure business kernel with **zero** dependencies on frameworks, databases, or LLM SDKs (`openai`, `sqlalchemy`, `langgraph`).
+- **Interface Seams (`typing.Protocol`):** `src/ports/` defines structural contracts (`InvoiceExtractorProtocol`, `ContractRetrieverProtocol`, `ERPAdapterProtocol`, `TenantPolicyProtocol`). Both `src/orchestration/` (LangGraph workflows) and infrastructure adapters (`src/ingestion/`, `src/rag/`, `src/tools/`) depend inward on `src/ports/` and `src/domain/`, never on each other.
+- **Composition Root (`src/core/`):** Centralizes typed configuration (`GatewaySettings`), domain exception hierarchies, correlation logging, and dependency injection wiring.
+
+### 5.2. Enterprise Invariants Enforced Across Layers
+
+| Architectural Invariant | Enforcement Mechanism | Business & Governance Rationale |
+| :--- | :--- | :--- |
+| **Zero-Retrofit Multi-Tenancy** | Immutable `TenantContext` (`tenant_id`, `user_id`, `department_acl`, `cost_center`, `correlation_id`) required on every port signature. | Prevents cross-tenant data leakage via early-binding SQL `WHERE` / PostgreSQL RLS filters and enables per-tenant LiteLLM chargebacks. |
+| **Deterministic FinOps Math** | Strict `decimal.Decimal` arithmetic with Pydantic v2 `@model_validator` cross-checks on line items and invoice totals. | Eliminates IEEE-754 floating-point drift and catches arithmetic discrepancies before reasoning models or ERP ledgers execute. |
+| **Untrusted Input Isolation** | Authenticated `tenant_id` is injected from verified JWT claims (`TenantContext`), overriding any LLM-extracted tenant identifiers. | Neutralizes indirect prompt injection payloads embedded inside vendor invoice memos or line-item descriptions. |
+| **Idempotent Side Effects** | Deterministic idempotency keys wrapping `ERPAdapterProtocol` write operations (`src/tools/`). | Guarantees exactly-once ERP mutations across LangGraph checkpoint retries or transient network failures. |
+
+### 5.3. Parallel Feature Team Boundaries (`src/`)
+- **Team A (`src/ingestion/`):** Document parsing and structured extraction adapters targeting the LiteLLM Egress Gateway.
+- **Team B (`src/rag/`):** Markdown-aware contract chunking, `pgvector` + `BM25` hybrid search, early-binding ACL filtering, and Cross-Encoder reranking.
+- **Team C (`src/tools/`):** FastMCP tool server, argument sanitization, idempotency decorators, and pluggable ERP adapters (Mock ERP / SAP / NetSuite).
+- **Team D (`src/orchestration/`):** LangGraph `StateGraph` orchestration, `PostgresSaver` durable checkpoints, and asynchronous Human-in-the-Loop (HITL) approval gates.
