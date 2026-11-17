@@ -45,7 +45,7 @@ Starting with clean plane separation allows the platform to scale from a single 
 * **Adapter Pattern on FastMCP:** Swap the initial Mock ERP backend for client-specific SAP S/4HANA, NetSuite, or Coupa adapters behind identical FastMCP tool schemas.
 * **Declarative Approval Thresholds:** Externalize the `$500` HITL interrupt threshold and variance tolerances into per-client policy configurations evaluated dynamically by the `LangGraph` state machine.
 
-## 5. Application Code Architecture (Hexagonal / Ports & Adapters)
+## 4. Application Code Architecture (Hexagonal / Ports & Adapters)
 
 ![Application Code Architecture](images/application-hex-architecture.png)
 
