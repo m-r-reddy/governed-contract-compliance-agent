@@ -70,3 +70,8 @@ To support concurrent multi-developer feature delivery and multi-tenant B2B SaaS
 - **Team B (`src/rag/`):** Markdown-aware contract chunking, `pgvector` + `BM25` hybrid search, early-binding ACL filtering, and Cross-Encoder reranking.
 - **Team C (`src/tools/`):** FastMCP tool server, argument sanitization, idempotency decorators, and pluggable ERP adapters (Mock ERP / SAP / NetSuite).
 - **Team D (`src/orchestration/`):** LangGraph `StateGraph` orchestration, `PostgresSaver` durable checkpoints, and asynchronous Human-in-the-Loop (HITL) approval gates.
+
+---
+
+## 5 Application Code Architecture / Visualization
+![Application Code Visualizaiton](/docs/images/phase2-hybrid-rag.png)
