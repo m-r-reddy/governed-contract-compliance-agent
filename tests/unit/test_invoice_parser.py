@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from decimal import Decimal
-import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from src.core.config import GatewaySettings
 from src.core.exceptions import DomainValidationError, GatewayUpstreamError
