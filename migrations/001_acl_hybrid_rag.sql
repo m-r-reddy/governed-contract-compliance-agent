@@ -75,3 +75,16 @@ DROP POLICY IF EXISTS tenant_isolation_chunks ON contract_chunks;
 CREATE POLICY tenant_isolation_chunks ON contract_chunks
     USING (tenant_id = current_setting('app.current_tenant_id', true))
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true));
+
+-- Least-privilege runtime role (NOSUPERUSER so FORCE ROW LEVEL SECURITY is strictly enforced)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'compliance_app') THEN
+        CREATE ROLE compliance_app LOGIN PASSWORD 'compliance_app_pass' NOSUPERUSER NOCREATEDB NOCREATEROLE;
+    END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE compliance_db TO compliance_app;
+GRANT USAGE ON SCHEMA public TO compliance_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE contracts, contract_chunks TO compliance_app;
